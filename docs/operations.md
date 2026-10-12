@@ -108,6 +108,19 @@ remains protected. `lsof` absence, warnings and inspection failures refuse clean
 
 ## Scheduling and uninstall
 
+To upgrade a recognized earlier local pilot, preserve its existing registry:
+
+```sh
+python3 install.py --upgrade-pilot --state /absolute/path/to/existing/state --skills
+```
+
+This explicit option recognizes the earlier managed launcher/skill, backs up
+replaced files, and keeps task IDs, ownership, archives and policy in the same
+SQLite registry. It never overwrites an unrelated command or skill. Review older
+script adapter compatibility before switching. An existing maintenance service
+must also be updated to the stable new source path and the same `--state`; don't
+leave two schedulers pointing at different registries or stop a running cleanup.
+
 macOS: `python3 install.py --service` opts into a LaunchAgent every ten minutes.
 It scans configured/known repositories, runs recovery inspection, and applies
 eligible completed-task hygiene. It does not fetch or merge.

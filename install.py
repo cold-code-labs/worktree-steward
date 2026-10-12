@@ -49,22 +49,28 @@ def main(argv=None):
     parser.add_argument("--state", type=Path)
     parser.add_argument("--skills", action="store_true", help="Install the shared skill for Codex, Cursor and Claude")
     parser.add_argument("--service", action="store_true", help="Opt into a macOS LaunchAgent every ten minutes")
+    parser.add_argument("--upgrade-pilot", action="store_true",
+                        help="Explicitly upgrade a recognized earlier pilot; requires --state")
     args = parser.parse_args(argv)
     if sys.version_info < (3, 12):
         raise PilotError("Python 3.12 or newer is required")
     if args.service and sys.platform != "darwin":
         raise PilotError("--service currently supports macOS; use your scheduler on Linux")
+    if args.upgrade_pilot and (args.state is None or not (args.state.expanduser() / "state.sqlite3").is_file()):
+        raise PilotError("--upgrade-pilot requires --state pointing to the existing pilot registry")
     os.umask(0o077)
     launcher = args.bin_dir.expanduser().resolve() / "wtpilot"
     destinations = [Path.home() / agent / "skills/worktree-hygiene"
                     for agent in (".codex", ".cursor", ".claude")] if args.skills else []
     # Check all collisions before modifying the command or agent installations.
-    if launcher.is_symlink() or (launcher.exists() and MARKER not in launcher.read_text()):
+    recognized = (MARKER, "# Worktree Pilot managed launcher") if args.upgrade_pilot else (MARKER,)
+    if launcher.is_symlink() or (launcher.exists() and not any(m in launcher.read_text() for m in recognized)):
         raise PilotError("Another wtpilot command exists; choose a different --bin-dir")
     for destination in destinations:
         existing = destination / "SKILL.md"
         if destination.is_symlink() or (destination.exists() and (
-                not existing.is_file() or "Worktree Steward" not in existing.read_text())):
+                not existing.is_file() or not ("Worktree Steward" in existing.read_text() or
+                    (args.upgrade_pilot and "Use the installed `~/.local/bin/wtpilot`" in existing.read_text())))):
             raise PilotError("A different worktree-hygiene skill already exists; preserve it before installing")
     pilot = Pilot(args.state)
     try:

@@ -1,5 +1,9 @@
 # Worktree Steward
 
+- CI uses Woodpecker (`.woodpecker.yml`). Never create, enable, run or require
+  GitHub Actions. Release gates use Woodpecker and required local checks.
+- Coolify handles deployable services in the maintainer's infrastructure; this
+  local CLI has no production web service to deploy.
 - Python standard library only; no service, LLM or network is required for maintenance.
 - No hard cap on concurrent agents or worktrees. Serialize short repository mutations,
   not agent execution. SQLite `BEGIN IMMEDIATE` protects shared resource allocation.

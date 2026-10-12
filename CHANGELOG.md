@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1 — 2026-10-12
+
+- Replace GitHub Actions with self-hosted Woodpecker CI; Actions is disabled and
+  excluded from delivery gates.
+- Explicit compatibility policy for reviewed older script adapters, retaining
+  the shared SQLite registry, original workspace roots and setup recovery.
+- Clarify how installed skills and already-running conversations refresh.
+
 ## 0.1.0 — 2026-10-12
 
 First public preview of Worktree Steward, released under MIT.

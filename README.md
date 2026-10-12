@@ -2,7 +2,6 @@
 
 **Let agents work in parallel. Keep the worktree pile recoverable.**
 
-[![CI](https://github.com/cold-code-labs/worktree-steward/actions/workflows/ci.yml/badge.svg)](https://github.com/cold-code-labs/worktree-steward/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Worktree Steward is a local SQLite manager for Git worktrees used by parallel
@@ -14,8 +13,8 @@ No arbitrary limit of four or five agents. No server, account, Python packages,
 telemetry, or LLM calls. Just Python's standard library, Git, and local evidence.
 
 This is an early release, tested locally on macOS with Python 3.12 and 3.14.
-CI is configured for macOS and Linux; Linux support is experimental until that
-matrix has run successfully. Use one Unix account and one shared state directory
+CI uses the maintainer's self-hosted Woodpecker infrastructure. GitHub Actions is
+disabled and is never a release gate. Use one Unix account and one shared state directory
 per machine; native Windows is unsupported.
 
 ## What it solves
@@ -178,5 +177,10 @@ The suite exercises real Git repositories, concurrent processes, owner conflicts
 failed setup, integration proofs, archival races and restoration. See
 [CONTRIBUTING.md](CONTRIBUTING.md). Useful next steps include additional repository
 adapter contracts, richer application ownership evidence, and Linux service tooling.
+
+The [Woodpecker pipeline](.woodpecker.yml) tests Python 3.12 and 3.14 on Linux and
+scans Git history for secrets. macOS checks run locally. Coolify is used for
+deployable services in the maintainer's infrastructure; this CLI installs locally
+and does not create a web service or expose ports for a hosted application.
 
 Built by [Cold Code Labs](https://github.com/cold-code-labs). Released under [MIT](LICENSE).
