@@ -318,6 +318,42 @@ esac
         self.assertFalse(marker.exists())
         self.assertEqual(len(self.pilot.inventory(self.pilot.repository(self.repo))), 1)
 
+    def test_reviewed_legacy_script_reuses_state_root_and_retry_setup(self):
+        scripts = self.repo / "scripts"; scripts.mkdir()
+        (scripts / "wt.sh").write_text('''#!/bin/bash
+# WTPILOT_REVIEWED_V0
+set -euo pipefail
+git worktree add -b "wt/$2" "$LEGACY_WORKSPACE_ROOT/$2" origin/main
+exit 7
+''')
+        git(self.repo, "add", "scripts/wt.sh"); git(self.repo, "commit", "-m", "reviewed adapter")
+        git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        repo = self.pilot.repository(self.repo)
+        self.pilot.policy.update(script_contract_marker="# WTPILOT_REVIEWED_V0",
+            script_root_environment="LEGACY_WORKSPACE_ROOT",
+            script_retry_setup={repo["id"]: [[sys.executable, "-c",
+                "from pathlib import Path; Path('setup-proof').write_text('prepared')"]]})
+        self.pilot.policy_path.write_text(json.dumps(self.pilot.policy))
+        with mock.patch.dict(os.environ, {"LEGACY_WORKSPACE_ROOT": str(self.root / "legacy-workspaces")}):
+            with self.assertRaises(PilotError):
+                self.pilot.new(self.repo, "legacy", "origin/main")
+        task = self.pilot.task("legacy")
+        self.assertEqual(task["state"], "failed")
+        self.assertEqual(Path(task["path"]), (self.root / "legacy-workspaces/legacy").resolve())
+        shared = Pilot(self.pilot.root)
+        try:
+            self.assertEqual(shared.task(task["id"])["id"], task["id"])
+            self.assertEqual(shared.retry(task["id"])["state"], "ready")
+            self.assertEqual((Path(task["path"]) / "setup-proof").read_text(), "prepared")
+        finally:
+            shared.close()
+
+    def test_invalid_compatibility_marker_does_not_run_script(self):
+        self.pilot.policy["script_contract_marker"] = ""
+        with self.assertRaises(PilotError):
+            self.create()
+        self.assertEqual(len(self.pilot.inventory(self.pilot.repository(self.repo))), 1)
+
     def test_default_archive_keeps_dependency_assets(self):
         self.pilot.policy["discardable_ignored_directories"] = []
         task = self.integrate(self.create())

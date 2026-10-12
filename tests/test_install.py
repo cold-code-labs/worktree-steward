@@ -93,6 +93,38 @@ class InstallTests(unittest.TestCase):
             self.invoke("--service")
         self.assertFalse(self.bin.exists())
 
+    def test_pilot_upgrade_requires_explicit_registry_and_preserves_old_files(self):
+        from wtpilot import Pilot
+        registry = Pilot(self.state)
+        registry.event(None, "preexisting-registry")
+        registry.close()
+        self.bin.mkdir()
+        old = "#!/bin/sh\n# Worktree Pilot managed launcher\nexit 0\n"
+        (self.bin / "wtpilot").write_text(old)
+        destination = self.home / ".codex/skills/worktree-hygiene"
+        destination.mkdir(parents=True)
+        (destination / "SKILL.md").write_text("Use the installed `~/.local/bin/wtpilot`\n")
+        with self.assertRaises(PilotError):
+            self.invoke("--skills")
+        result = self.invoke("--skills", "--upgrade-pilot")
+        registry = Pilot(self.state)
+        try:
+            self.assertEqual(registry.db.execute("select kind from events").fetchone()[0], "preexisting-registry")
+        finally:
+            registry.close()
+        backup = Path(result["backup_directories"][0])
+        self.assertEqual(next(backup.rglob("wtpilot")).read_text(), old)
+        self.assertIn("Worktree Steward", (destination / "SKILL.md").read_text())
+
+    def test_pilot_upgrade_never_overwrites_unknown_command(self):
+        from wtpilot import Pilot
+        Pilot(self.state).close()
+        self.bin.mkdir()
+        (self.bin / "wtpilot").write_text("unrelated command")
+        with self.assertRaises(PilotError):
+            self.invoke("--upgrade-pilot")
+        self.assertEqual((self.bin / "wtpilot").read_text(), "unrelated command")
+
 
 if __name__ == "__main__":
     unittest.main()

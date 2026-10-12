@@ -33,6 +33,14 @@ managed, archival uses its recorded workspace root. This contract currently does
 not support another base branch, bare repositories, custom branch naming or restore.
 Those cases stay preserved until a compatible adapter exists.
 
+For an explicitly reviewed older adapter, local policy can set
+`script_contract_marker` and `script_root_environment`. These are compatibility
+assertions by the operator, not automatic detection or permission to manage an
+unknown script. `script_retry_setup` maps registry repository IDs to argv arrays
+that repeat setup performed inside the script if creation fails. Those commands
+are stored with each task for recovery; they are not run a second time on a
+successful creation. Keep this repository-specific policy private.
+
 The script belongs to your repository: make changes through its normal code review,
 then keep using `scripts/wt.sh new`, `ls`, `rm`, and `gc`. The public project's own
 example is under `examples/`, so the project uses the generic lifecycle itself.

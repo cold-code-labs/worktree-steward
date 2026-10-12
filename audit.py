@@ -97,7 +97,7 @@ def inspect_worktree(pilot, row, repo, target, target_error=None, allow_squash=F
             reasons.append("integration_target_unavailable")
         if repo["adapter"] == "script":
             pilot.require_script_contract(repo)
-            root = Path(os.environ.get("WTPILOT_WORKTREE_ROOT", str(Path.home() / "wt" / repo["name"]))).resolve()
+            root = pilot.script_root(repo).resolve()
             if Path(row["path"]).parent != root or row["branch"] != "wt/" + Path(row["path"]).name:
                 reasons.append("outside_script_adapter_contract")
         if not reasons:

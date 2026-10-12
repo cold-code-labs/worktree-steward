@@ -21,7 +21,7 @@ import tarfile
 import time
 import uuid
 
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 DEFAULT_STATE = (Path.home() / "Library/Application Support/worktree-steward"
                  if sys.platform == "darwin" else
                  Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state"))) / "worktree-steward")
@@ -35,6 +35,9 @@ DEFAULT_POLICY = {
     "port_stride": 10,
     "discardable_ignored_directories": [],
     "automatic_hygiene": True,
+    "script_contract_marker": "# WTPILOT_SCRIPT_CONTRACT_V1",
+    "script_root_environment": "WTPILOT_WORKTREE_ROOT",
+    "script_retry_setup": {},
 }
 TERMINAL = {"completed", "archived"}
 SCRIPT_CONTRACT = "# WTPILOT_SCRIPT_CONTRACT_V1"
@@ -304,8 +307,21 @@ class Pilot:
         raise PilotError("Port ranges exhausted; use --no-ports or archive completed tasks")
 
     def require_script_contract(self, repo):
-        if repo["adapter"] == "script" and SCRIPT_CONTRACT not in Path(repo["script"]).read_text():
+        marker = self.policy["script_contract_marker"]
+        if not isinstance(marker, str) or not marker.startswith("# WTPILOT_") or len(marker) > 100:
+            raise PilotError("Invalid script contract marker")
+        if repo["adapter"] == "script" and marker not in Path(repo["script"]).read_text():
             raise PilotError("Unrecognized scripts/wt.sh; adapt to the documented contract before lifecycle management")
+
+    def script_root(self, repo):
+        return Path(os.environ.get("WTPILOT_WORKTREE_ROOT",
+                    os.environ.get(self.script_root_environment(), str(Path.home() / "wt" / repo["name"]))))
+
+    def script_root_environment(self):
+        name = self.policy["script_root_environment"]
+        if not isinstance(name, str) or not re.fullmatch(r"[A-Z][A-Z0-9_]{0,79}", name):
+            raise PilotError("Invalid script workspace-root environment name")
+        return name
 
     def new(self, path, key, base=None, setup=None, ports=True):
         if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,79}", key):
@@ -325,7 +341,7 @@ class Pilot:
             task_id = uuid.uuid4().hex
             if repo["adapter"] == "script":
                 branch = "wt/" + key
-                wt_path = Path(os.environ.get("WTPILOT_WORKTREE_ROOT", str(Path.home() / "wt" / repo["name"]))) / key
+                wt_path = self.script_root(repo) / key
             else:
                 branch = "codex/" + key + "-" + task_id[:8]
                 wt_path = Path(self.policy["managed_root"]).expanduser() / (repo["name"] + "-" + repo["id"][:8]) / key
@@ -333,6 +349,11 @@ class Pilot:
             if wt_path.exists():
                 raise PilotError("Workspace already exists outside this task; adopt it explicitly")
             recovery_setup = list(setup or [])
+            if repo["adapter"] == "script":
+                recovery_setup = list(self.policy["script_retry_setup"].get(repo["id"], [])) + recovery_setup
+                if any(not isinstance(argv, list) or not argv or
+                       any(not isinstance(arg, str) for arg in argv) for argv in recovery_setup):
+                    raise PilotError("Script retry setup must be an array of nonempty argv arrays")
             now = time.time()
             with self.transaction():
                 slot = self.allocate_slot() if ports else None
@@ -382,6 +403,7 @@ class Pilot:
             env["WTPILOT_REMOVAL_TASK"] = task["id"]
         if workspace_root is not None:
             env["WTPILOT_WORKTREE_ROOT"] = str(workspace_root)
+            env[self.script_root_environment()] = str(workspace_root)
         result = command(["bash", repo["script"], action, key], cwd=repo["path"], env=env, timeout=1800)
         return result
 
@@ -397,7 +419,7 @@ class Pilot:
             if expected_head and matched["HEAD"] != expected_head:
                 raise PilotError("Worktree HEAD changed since audit")
             if repo["adapter"] == "script":
-                expected = Path(os.environ.get("WTPILOT_WORKTREE_ROOT", str(Path.home() / "wt" / repo["name"]))) / key
+                expected = self.script_root(repo) / key
                 if path != expected.resolve() or matched["branch"] != "refs/heads/wt/" + key:
                     raise PilotError("Script adapter can only adopt its configured root and wt/<task> branches")
             task_id, now = uuid.uuid4().hex, time.time()

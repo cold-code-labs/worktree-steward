@@ -5,7 +5,9 @@ small fixes and documentation improvements can go straight to a pull request.
 
 Run the checks in README before opening a PR. Tests must use synthetic temporary
 repositories and isolated state, never a contributor's real worktrees or credentials.
-macOS and Linux CI must pass. Keep GitHub Actions pinned to commit IDs.
+Run macOS checks locally and the Linux matrix in Woodpecker (`.woodpecker.yml`).
+Keep container images pinned by digest. GitHub Actions is disabled and is not a
+release gate; don't add workflows or wait for its historical failed runs.
 
 Preserve the lifecycle invariants in AGENTS.md: uncertainty preserves work; unmanaged
 worktrees need explicit adoption; expiry is not integration; archive and recovery
