@@ -1,0 +1,4 @@
+interface:
+  display_name: "Worktree hygiene"
+  short_description: "Audit and clean worktrees without losing active work"
+  default_prompt: "Use $worktree-hygiene to audit local worktrees and clean proven-integrated work while preserving pending work and active agents."
