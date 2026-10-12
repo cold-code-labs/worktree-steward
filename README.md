@@ -13,8 +13,10 @@ and checking for pending work and active processes.
 No arbitrary limit of four or five agents. No server, account, Python packages,
 telemetry, or LLM calls. Just Python's standard library, Git, and local evidence.
 
-This is an early release. macOS and Linux are tested in CI. Use one Unix account
-and one shared state directory per machine; native Windows is unsupported.
+This is an early release, tested locally on macOS with Python 3.12 and 3.14.
+CI is configured for macOS and Linux; Linux support is experimental until that
+matrix has run successfully. Use one Unix account and one shared state directory
+per machine; native Windows is unsupported.
 
 ## What it solves
 
