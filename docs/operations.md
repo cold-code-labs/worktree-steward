@@ -147,3 +147,14 @@ operations; unrelated Git/filesystem mutations can bypass them. `lsof` cannot
 establish application chat ownership, so application-owned worktrees are preserved.
 Bare repositories are observation-only. This tool does not approve code, merge PRs,
 prune branches, deploy, or replace backups.
+
+### Release installed dependencies
+
+Use `wtpilot release TASK --owner OWNER --dependencies` to release ownership and
+then evict dependencies. If another agent claims the task in between, eviction
+is refused and the new claim stays valid. After releasing a task, run `wtpilot release-dependencies TASK` to preview and
+add `--apply` to evict ignored node_modules beside tracked package manifests.
+Enable node_modules in the existing discardable directory policy. Pending source
+changes can stay in the worktree. Reinstall using the project's frozen lockfile
+when resuming. The reported free-space delta is volume-wide and includes
+concurrent filesystem activity.
