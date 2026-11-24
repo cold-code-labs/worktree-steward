@@ -488,6 +488,51 @@ class Pilot:
             self.event(task["id"], "released")
         return self.public_task(self.task(task["id"]))
 
+    def release_dependencies(self, reference, apply=False):
+        """Evict ignored npm installations without requiring a clean source tree."""
+        task = self.task(reference)
+        with self.file_lock(task["repo_id"]):
+            task = self.task(task["id"])
+            if task["state"] not in {"ready", "completed", "interrupted"} or task["owner"] or self.owner_alive(task):
+                raise PilotError("Release ownership before evicting dependencies")
+            record = self.validate_workspace(task)
+            root = Path(task["path"])
+            if "locked" in record or "prunable" in record or any(
+                    a in {".codex", ".claude", ".cursor"} and b == "worktrees"
+                    for a, b in zip(root.parts, root.parts[1:])):
+                raise PilotError("Locked, prunable or application-owned workspace")
+            targets = []
+            if "node_modules" in self.policy["discardable_ignored_directories"]:
+                manifests = git(root, "ls-files", "-z", "--", "package.json", ":(glob)**/package.json")
+                for entry in set(manifests.stdout.split(b"\0")) - {b""}:
+                    folder = Path(os.fsdecode(entry)).parent / "node_modules"
+                    path = root / folder
+                    if "node_modules" in folder.parts[:-1] or path.resolve() != path or not path.is_dir():
+                        continue
+                    if git(root, "check-ignore", "-q", "--", str(folder) + "/", check=False).returncode:
+                        continue
+                    literal = ":(literal)" + str(folder)
+                    if git(root, "ls-files", "-z", "--", literal).stdout or git(root, "ls-tree", "HEAD", "--", literal).stdout:
+                        continue
+                    targets.append(folder)
+            targets.sort()
+            result = {"task_id": task["id"], "directories": [str(p) for p in targets], "applied": apply}
+            if apply and targets:
+                if self.open_processes(root):
+                    raise PilotError("Workspace has open files or process working directories")
+                def inspection_failed(error):
+                    raise error
+                for folder in targets:
+                    for base, dirs, files in os.walk(root / folder, onerror=inspection_failed):
+                        if ".git" in dirs or ".git" in files or os.path.ismount(base):
+                            raise PilotError("Dependency directory contains a repository or mount")
+                before = shutil.disk_usage(root).free
+                for folder in targets:
+                    shutil.rmtree(root / folder)
+                result["volume_free_bytes_delta"] = shutil.disk_usage(root).free - before
+                self.event(task["id"], "released_dependencies", result)
+            return result
+
     def retry(self, reference):
         task = self.task(reference)
         with self.file_lock(task["repo_id"]):
@@ -847,8 +892,12 @@ def parser():
     for name in ("claim", "heartbeat", "release"):
         c = sub.add_parser(name); c.add_argument("task"); c.add_argument("--owner", required=True)
         if name == "claim": c.add_argument("--pid", type=int)
+        if name == "release": c.add_argument("--dependencies", action="store_true")
     for name in ("context", "retry", "archive", "restore"):
         c = sub.add_parser(name); c.add_argument("task")
+    deps = sub.add_parser("release-dependencies", help="List or remove ignored node_modules in an inactive task")
+    deps.add_argument("task")
+    deps.add_argument("--apply", action="store_true")
     finish = sub.add_parser("finish"); finish.add_argument("task"); finish.add_argument("--into", required=True)
     finish.add_argument("--allow-squash", action="store_true")
     run = sub.add_parser("run"); run.add_argument("task"); run.add_argument("--owner"); run.add_argument("command", nargs=argparse.REMAINDER)
@@ -890,7 +939,11 @@ def main(argv=None):
         elif action == "adopt": result = pilot.adopt(args.path, args.task, args.managed)
         elif action == "claim": result = pilot.claim(args.task, args.owner, args.pid)
         elif action == "heartbeat": result = pilot.heartbeat(args.task, args.owner)
-        elif action == "release": result = pilot.release(args.task, args.owner)
+        elif action == "release":
+            result = pilot.release(args.task, args.owner)
+            if args.dependencies:
+                result["dependencies"] = pilot.release_dependencies(result["id"], apply=True)
+        elif action == "release-dependencies": result = pilot.release_dependencies(args.task, args.apply)
         elif action == "context":
             task = pilot.task(args.task)
             result = {"task": pilot.public_task(task), "environment": {k: v for k, v in pilot.environment(task).items()

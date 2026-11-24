@@ -50,6 +50,37 @@ class PilotTests(unittest.TestCase):
         git(self.repo, "merge", "--ff-only", task["branch"])
         return self.pilot.finish(task["id"], "main")
 
+    def test_release_dependencies_preserves_source_and_can_retry(self):
+        task = self.create()
+        root = Path(task["path"])
+        (root / "package.json").write_text("{}")
+        git(root, "add", "package.json")
+        (root / "pending").write_text("local work")
+        deps = root / "node_modules"
+        deps.mkdir()
+        (deps / "generated").touch()
+        self.assertEqual(self.pilot.release_dependencies(task["id"])["directories"], ["node_modules"])
+        with mock.patch.object(self.pilot, "open_processes", return_value=[123]):
+            with self.assertRaises(PilotError):
+                self.pilot.release_dependencies(task["id"], True)
+        self.assertTrue(deps.exists())
+        self.pilot.release_dependencies(task["id"], True)
+        self.assertFalse(deps.exists())
+        self.assertEqual((root / "pending").read_text(), "local work")
+        self.assertEqual(self.pilot.release_dependencies(task["id"], True)["directories"], [])
+
+    def test_release_dependencies_preserves_tracked_and_owned(self):
+        task = self.create()
+        root = Path(task["path"])
+        (root / "package.json").touch()
+        (root / "node_modules").mkdir()
+        (root / "node_modules/custom").touch()
+        git(root, "add", "-f", "package.json", "node_modules/custom")
+        self.assertEqual(self.pilot.release_dependencies(task["id"], True)["directories"], [])
+        self.pilot.claim(task["id"], "test", os.getpid())
+        with self.assertRaises(PilotError):
+            self.pilot.release_dependencies(task["id"], True)
+
     def test_same_task_reuses_identity(self):
         a, b = self.create(), self.create()
         self.assertEqual(a["id"], b["id"])
